@@ -6,6 +6,7 @@ import os
 import tempfile
 import subprocess
 from sense_hat import SenseHat
+import base64
 
 # Set up OpenAI API key
 # openai.api_key = "your_openai_api_key"
@@ -95,7 +96,24 @@ def query_openai(prompt):
 def text_to_speech(text):
     """Uses macOS `say` command to convert text to speech."""
     print("Speaking...")
-    subprocess.run(["espeak", " -s 20 " + text])
+    completion = client.chat.completions.create(
+        model="gpt-4o-audio-preview",
+        modalities=["text", "audio"],
+        audio={"voice": "alloy", "format": "wav"},
+        messages=[
+            {
+                "role": "user",
+                "content": text,
+            }
+        ]
+    )
+
+    print(completion.choices[0])
+
+    wav_bytes = base64.b64decode(completion.choices[0].message.audio.data)
+    with open("dog.wav", "wb") as f:
+        f.write(wav_bytes)
+        subprocess.run(["espeak", " -s 20 " + text])
 
 def main():
     
