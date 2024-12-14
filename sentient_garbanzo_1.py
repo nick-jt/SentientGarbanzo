@@ -6,6 +6,10 @@ import os
 import tempfile
 import subprocess
 from sense_hat import SenseHat
+import speech_recognition as sr
+import noisereduce as nr
+from pydub import AudioSegment
+from pydub.silence import split_on_silence
 
 # Set up OpenAI API key
 # openai.api_key = "your_openai_api_key"
@@ -14,7 +18,7 @@ from sense_hat import SenseHat
 
 # Audio configuration
 SAMPLE_RATE = 16000  # Whisper expects 16kHz audio
-DURATION = 5  # Duration of audio recording in seconds
+DURATION = 3  # Duration of audio recording in seconds
 CHANNELS = 1  # Mono audio
 
 client = openai.OpenAI()
@@ -59,6 +63,7 @@ def consolidate_audio_files(files, output_file):
             # Delete the processed file
             os.remove(file)
             print(f"Deleted {file}")
+        fileNum += 1
         
     # Write the combined audio to the output file
     with wave.open(output_file, 'wb') as wf:
@@ -67,16 +72,66 @@ def consolidate_audio_files(files, output_file):
         wf.setframerate(sample_rate)
         wf.writeframes(combined_audio)
     
+def preprocess_audio(input_file, output_file):    
+    """Preprocess audio by removing silence and reducing noise."""
+    with wave.open(input_file, 'rb') as wf:
+        channels = wf.getnchannels()
+        sample_width = wf.getsampwidth()
+        sample_rate = wf.getframerate()
+    
+    
+    # Step 1: Remove Silence
+    audio = AudioSegment.from_wav(input_file)
+    chunks = split_on_silence(
+        audio,
+        min_silence_len=1000,  # Silence length in ms
+        silence_thresh=-40     # Silence threshold in dBFS
+    )
+    
+    cleaned_audio = AudioSegment.empty()
+    for chunk in chunks:
+        cleaned_audio += chunk
+
+    # Save the intermediate cleaned file
+    intermediate_file = "intermediate_cleaned.wav"
+    cleaned_audio.export(intermediate_file, format="wav")
+
+    # Step 2: Reduce Noise
+    with wave.open(intermediate_file, 'rb') as wf:
+        sample_rate = wf.getframerate()
+        num_frames = wf.getnframes()
+        audio_data = wf.readframes(num_frames)
+        
+        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+        reduced_audio = nr.reduce_noise(y=audio_array, sr=sample_rate)
+
+    # Save the final preprocessed file
+    with wave.open(output_file, 'wb') as wf_out:
+        wf_out.setnchannels(channels)  # Mono audio
+        wf_out.setsampwidth(sample_width)  # 16-bit audio
+        wf_out.setframerate(sample_rate)
+        wf_out.writeframes(reduced_audio.astype(np.int16).tobytes())
+
+    print(f"Preprocessed audio saved to {output_file}")
 
 def transcribe_audio(file_name):
-    """Transcribes the audio using OpenAI's Whisper."""
-    with open(file_name, "rb") as audio_file:
+    """Transcribes the audio using OpenAI's Whisper after preprocessing."""
+    # Preprocess the audio
+    #playAudio(file_name)
+    
+    preprocessed_file = "preprocessed_audio.wav"
+    preprocess_audio(file_name, preprocessed_file)
+    
+    playAudio(preprocessed_file)    
+
+    # Transcribe the preprocessed audio
+    with open(preprocessed_file, "rb") as audio_file:
         print("Transcribing audio...")
-        # transcript = openai.Audio.transcribe("whisper-1", audio_file)
         transcript = client.audio.transcriptions.create(
-          model="whisper-1",
-          file=audio_file
+            model="whisper-1",
+            file=audio_file
         )
+
     return transcript.text
 
 def query_openai(prompt):
@@ -96,6 +151,37 @@ def text_to_speech(text):
     """Uses macOS `say` command to convert text to speech."""
     print("Speaking...")
     subprocess.run(["espeak", " -s 20 " + text])
+
+def playAudio(file):
+    with wave.open(file, 'rb') as wf:
+        sample_rate = wf.getframerate()  # Get sample rate
+        num_frames = wf.getnframes()     # Get the number of frames
+        
+        # Read the raw byte data
+        raw_data = wf.readframes(num_frames)
+        
+        # Get the number of channels and sample width (e.g., 2 for 16-bit PCM)
+        num_channels = wf.getnchannels()
+        sample_width = wf.getsampwidth()
+        
+        # Determine the format based on sample width
+        if sample_width == 2:
+            dtype = np.int16
+        elif sample_width == 4:
+            dtype = np.int32
+        else:
+            raise ValueError(f"Unsupported sample width: {sample_width}")
+
+        # Convert the raw byte data to a NumPy array
+        data = np.frombuffer(raw_data, dtype=dtype)
+        
+        # Reshape the data for stereo or multi-channel audio if necessary
+        if num_channels > 1:
+            data = data.reshape(-1, num_channels)
+        
+        # Play the audio data
+        sd.play(data, samplerate=sample_rate)
+        sd.wait()
 
 def main():
     
@@ -144,12 +230,6 @@ def main():
         output_file = os.path.join(tempfile.gettempdir(), "temp_audio.wav")
         consolidate_audio_files(files, output_file)
         
-        with wave.open(output_file, 'rb') as wf:
-            sample_rate = wf.getframerate()
-            data = wf.readframes(wf.getnframes())
-            
-            sd.play(data, samplerate=sample_rate)
-            sd.wait()
         
 
         # Transcribe audio to text
