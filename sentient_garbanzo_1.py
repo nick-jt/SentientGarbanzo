@@ -7,6 +7,8 @@ import tempfile
 import subprocess
 from sense_hat import SenseHat
 import base64
+import simpleaudio as sa
+import io
 
 # Set up OpenAI API key
 # openai.api_key = "your_openai_api_key"
@@ -103,17 +105,19 @@ def text_to_speech(text):
         messages=[
             {
                 "role": "user",
-                "content": text,
+                "content": text
             }
         ]
     )
-
-    print(completion.choices[0])
-
+    filename = "dog.wav"
+    print(type(completion.choices[0].message.audio.data))
     wav_bytes = base64.b64decode(completion.choices[0].message.audio.data)
-    with open("dog.wav", "wb") as f:
+    with open(filename, "wb") as f:
         f.write(wav_bytes)
-        subprocess.run(["espeak", " -s 20 " + text])
+    wave_read = wave.open(filename, 'rb')
+    wave_obj = sa.WaveObject.from_wave_read(wave_read)  # Load audio data into WaveObject
+    play_obj = wave_obj.play()  # Play the audio
+    play_obj.wait_done()  # Wait for playback to finish
 
 def main():
     
