@@ -39,8 +39,7 @@ def transcribe_audio(file_name):
           model="whisper-1",
           file=audio_file
         )
-    print(f"Transcription: {transcript}")
-    return transcript
+    return transcript.text
 
 def query_openai(prompt):
     """Sends a prompt to OpenAI's GPT-4 and returns the response."""
@@ -52,9 +51,8 @@ def query_openai(prompt):
             {"role": "user", "content": prompt},
         ],
     )
-    answer = response['choices'][0]['message']['content']
-    print(f"OpenAI Response: {answer}")
-    return answer
+    print(f"OpenAI Response: {response.choices[0].message.content}")
+    return response.choices[0].message.content
 
 def text_to_speech(text):
     """Uses macOS `say` command to convert text to speech."""
