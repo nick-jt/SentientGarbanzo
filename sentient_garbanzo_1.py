@@ -16,7 +16,8 @@ import io
 SAMPLE_RATE = 16000  # Whisper expects 16kHz audio
 DURATION = 5  # Duration of audio recording in seconds
 CHANNELS = 1  # Mono audio
-TEMP_AUDIO_FILE = os.path.join(tempfile.gettempdir(), "temp_audio.wav")
+TEMP_INPUT_AUDIO_FILE = os.path.join(tempfile.gettempdir(), "temp_audio_in.wav")
+TEMP_OUTPUT_AUDIO_FILE = os.path.join(tempfile.gettempdir(), "temp_audio_out.wav")
 client = openai.OpenAI()
 
 def record_audio(file_name, duration=DURATION):
@@ -37,7 +38,6 @@ def transcribe_audio(file_name):
     """Transcribes the audio using OpenAI's Whisper."""
     with open(file_name, "rb") as audio_file:
         print("Transcribing audio...")
-        # transcript = openai.Audio.transcribe("whisper-1", audio_file)
         transcript = client.audio.transcriptions.create(
           model="whisper-1",
           file=audio_file
@@ -57,7 +57,7 @@ def query_openai(prompt):
     print(f"OpenAI Response: {response.choices[0].message.content}")
     return response.choices[0].message.content
 
-def text_to_speech(text):
+def text_to_speech(text, filename):
     """Uses macOS `say` command to convert text to speech."""
     print("Speaking...")
     completion = client.chat.completions.create(
@@ -71,8 +71,6 @@ def text_to_speech(text):
             }
         ]
     )
-    filename = "dog.wav"
-    print(type(completion.choices[0].message.audio.data))
     wav_bytes = base64.b64decode(completion.choices[0].message.audio.data)
     with open(filename, "wb") as f:
         f.write(wav_bytes)
@@ -90,16 +88,16 @@ def main():
             break
 
         # Record audio
-        record_audio(TEMP_AUDIO_FILE)
+        record_audio(TEMP_INPUT_AUDIO_FILE)
 
         # Transcribe audio to text
-        prompt = transcribe_audio(TEMP_AUDIO_FILE)
+        prompt = transcribe_audio(TEMP_INPUT_AUDIO_FILE)
 
         # Query OpenAI
         response = query_openai(prompt)
 
         # Speak response
-        text_to_speech(response)
+        text_to_speech(response, TEMP_OUTPUT_AUDIO_FILE)
 
 if __name__ == "__main__":
     main()
