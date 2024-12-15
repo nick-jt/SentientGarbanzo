@@ -5,6 +5,9 @@ import wave
 import os
 import tempfile
 import subprocess
+import base64
+import simpleaudio as sa
+import io
 
 # Set up OpenAI API key
 # openai.api_key = "your_openai_api_key"
@@ -57,7 +60,26 @@ def query_openai(prompt):
 def text_to_speech(text):
     """Uses macOS `say` command to convert text to speech."""
     print("Speaking...")
-    subprocess.run(["say", text])
+    completion = client.chat.completions.create(
+        model="gpt-4o-audio-preview",
+        modalities=["text", "audio"],
+        audio={"voice": "alloy", "format": "wav"},
+        messages=[
+            {
+                "role": "user",
+                "content": text
+            }
+        ]
+    )
+    filename = "dog.wav"
+    print(type(completion.choices[0].message.audio.data))
+    wav_bytes = base64.b64decode(completion.choices[0].message.audio.data)
+    with open(filename, "wb") as f:
+        f.write(wav_bytes)
+    wave_read = wave.open(filename, 'rb')
+    wave_obj = sa.WaveObject.from_wave_read(wave_read)  # Load audio data into WaveObject
+    play_obj = wave_obj.play()  # Play the audio
+    play_obj.wait_done()  # Wait for playback to finish
 
 def main():
     while True:
