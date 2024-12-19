@@ -10,6 +10,10 @@ import speech_recognition as sr
 import noisereduce as nr
 from pydub import AudioSegment
 from pydub.silence import split_on_silence
+import base64
+import simpleaudio as sa
+import io
+import time
 
 # Set up OpenAI API key
 # openai.api_key = "your_openai_api_key"
@@ -22,6 +26,7 @@ DURATION = 3  # Duration of audio recording in seconds
 CHANNELS = 1  # Mono audio
 
 client = openai.OpenAI()
+
 
 def record_audio(file_name, duration=DURATION):
     """Records audio and saves it to a file."""
@@ -119,13 +124,13 @@ def transcribe_audio(file_name):
     # Preprocess the audio
     #playAudio(file_name)
     
-    preprocessed_file = "preprocessed_audio.wav"
-    preprocess_audio(file_name, preprocessed_file)
+    #preprocessed_file = "preprocessed_audio.wav"
+    #preprocess_audio(file_name, preprocessed_file)
     
-    playAudio(preprocessed_file)    
+    # playAudio(file_name)    
 
     # Transcribe the preprocessed audio
-    with open(preprocessed_file, "rb") as audio_file:
+    with open(file_name, "rb") as audio_file:
         print("Transcribing audio...")
         transcript = client.audio.transcriptions.create(
             model="whisper-1",
@@ -138,16 +143,54 @@ def query_openai(prompt):
     """Sends a prompt to OpenAI's GPT-4 and returns the response."""
     print("Querying OpenAI...")
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o-audio-preview",
+        modalities=["text", "audio"],
+        audio={"voice": "onyx", "format": "wav"},
         messages=[
-            {"role": "system", "content": "You are a helpful assistant named Garbanzo. Your physical form is a cactus, and you really hate a guy named Erik."},
+            {"role": "system", "content": "You're a sassy little hoe named Garbanzo. Keep it quick, honey. Your physical form is a cactus that loves to dance, but not line dancing. You hate line dancing, and everybody that does line dance. You hate this guy Erik, and always talk about him because he likes to line dance."},
             {"role": "user", "content": prompt},
         ],
-    )
+)
     print(f"OpenAI Response: {response.choices[0].message.content}")
+    
+    # We have a respnse, get the audio data and save the file
+    filename = "dog.wav"
+    wav_bytes = base64.b64decode(response.choices[0].message.audio.data)
+    with open(filename, "wb") as f:
+        f.write(wav_bytes)
+    wave_read = wave.open(filename, 'rb')
+    wave_obj = sa.WaveObject.from_wave_read(wave_read)  # Load audio data into WaveObject
+    play_obj = wave_obj.play()  # Play the audio
+    play_obj.wait_done()  # Wait for playback to finish
+    
     return response.choices[0].message.content
 
+'''
 def text_to_speech(text):
+    """Uses macOS `say` command to convert text to speech."""
+    print("Speaking...")
+    completion = client.chat.completions.create(
+        model="gpt-4o-audio-preview",
+        modalities=["text", "audio"],
+        audio={"voice": "onyx", "format": "wav"},
+        messages=[
+            {
+                "role": "user",
+                "content": text
+            }
+        ]
+    )
+    filename = "dog.wav"
+    wav_bytes = base64.b64decode(completion.choices[0].message.audio.data)
+    with open(filename, "wb") as f:
+        f.write(wav_bytes)
+    wave_read = wave.open(filename, 'rb')
+    wave_obj = sa.WaveObject.from_wave_read(wave_read)  # Load audio data into WaveObject
+    play_obj = wave_obj.play()  # Play the audio
+    play_obj.wait_done()  # Wait for playback to finish
+'''
+
+def text_to_speech_legacy(text):
     """Uses macOS `say` command to convert text to speech."""
     print("Speaking...")
     subprocess.run(["espeak", " -s 20 " + text])
@@ -183,11 +226,123 @@ def playAudio(file):
         sd.play(data, samplerate=sample_rate)
         sd.wait()
 
+def setRing(sense, color):
+        sense.set_pixel(0, 0, color)
+        sense.set_pixel(1, 0, color)
+        sense.set_pixel(2, 0, color)
+        sense.set_pixel(3, 0, color)
+        sense.set_pixel(4, 0, color)
+        sense.set_pixel(5, 0, color)
+        sense.set_pixel(6, 0, color)
+        sense.set_pixel(7, 0, color)
+        sense.set_pixel(7, 1, color)
+        sense.set_pixel(7, 2, color)
+        sense.set_pixel(7, 3, color)
+        sense.set_pixel(7, 4, color)
+        sense.set_pixel(7, 5, color)
+        sense.set_pixel(7, 6, color)
+        sense.set_pixel(7, 7, color)
+        sense.set_pixel(6, 7, color)
+        sense.set_pixel(5, 7, color)
+        sense.set_pixel(4, 7, color)
+        sense.set_pixel(3, 7, color)
+        sense.set_pixel(2, 7, color)
+        sense.set_pixel(1, 7, color)
+        sense.set_pixel(0, 7, color)
+        sense.set_pixel(0, 6, color)
+        sense.set_pixel(0, 5, color)
+        sense.set_pixel(0, 4, color)
+        sense.set_pixel(0, 3, color)
+        sense.set_pixel(0, 2, color)
+        sense.set_pixel(0, 1, color)
+
+
+def connect_bluetooth_device(device_mac, mySense):
+    """
+    Attempts to connect to a Bluetooth device by MAC address.
+    """
+    CONNECTED = False
+    
+    while not CONNECTED:
+        # Start bluetoothctl process
+        try:
+            #mySense.show_message("Connecting to Bluetooth...", scroll_speed=0.04)
+            subprocess.run(['bluetoothctl', 'connect', device_mac], check=True)
+            mySense.show_message("Connected to Bluetooth!", scroll_speed=0.02)
+            CONNECTED = True
+        except subprocess.CalledProcessError:
+            mySense.show_message('Bluetooth Not Connected. Push Left to Try Again...', scroll_speed=0.02)
+            
+            event = mySense.stick.wait_for_event(emptybuffer=True)
+            if event.direction == "left":
+                mySense.show_message("Retrying...", scroll_speed=0.02)
+                time.sleep(2)
+            else:
+                mySense.show_message("Exiting Bluetooth Setup...", scroll_speed=0.02)
+                break
+    
+    return CONNECTED
+
 def main():
     
     mySense = SenseHat()
     
+    red = (255, 0, 0)
+    green = (0, 255, 0)
+    blue = (0, 0, 255)
+    
+    # Wait 5 seconds before trying the wifi
+    count = 0
+    while count < 2:
+        mySense.show_message("...")
+        time.sleep(1)
+        count = count+1
+
+
+    WIFI = True
+    CONNECTED = False
+    while WIFI:
+        ################ Check on WIFI ####################
+        ps = subprocess.Popen(['iwgetid'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        try:
+            output=subprocess.check_output(('grep', 'ESSID'), stdin=ps.stdout)
+            outputSTR = str(output)
+            mySense.show_message('Wifi: ' + outputSTR[19:len(outputSTR)-4], scroll_speed = 0.02)
+            WIFI = False
+            CONNECTED = True
+            
+        except subprocess.CalledProcessError:
+            sense.show_message('Wifi Not Connected. Push Left to Try Again...', scroll_speed = 0.02)
+                
+            event = mySense.stick.wait_for_event(emptybuffer = True)
+            if event.direction == "left":
+                mySense.show_message("Retrying...")
+                time.sleep(2)
+                WIFI = True
+            else:
+                WIFI = False 
+    
+    if not CONNECTED:
+        setRing(mySense, red)
+        exit(0)
+    
+    
+    # Now, do the same for bluetooth
+    device_mac_address = "EC:73:79:02:C2:B6"
+    if not connect_bluetooth_device(device_mac_address, mySense):
+        # If connection fails, set a red ring and exit
+        setRing(mySense, red)
+        exit(0)
+        
+        
+    INIT = False
     while True:
+        if INIT:
+            client = openai.OpenAI()
+            INIT = False
+        
+        setRing(mySense, green)
+        
         # Wait for the user to press the button.
         listening = False
         print("\nPress in on the joystic to start recording or press down to quit.")
@@ -198,10 +353,12 @@ def main():
                 break
             if (event.direction == "down"):
                 print("Exiting.")
+                mySense.clear()
+                INIT = True
                 break
         
         if listening == False:
-            break
+            continue
         
         # We are listening
         iter = 0
@@ -215,7 +372,7 @@ def main():
                 
             if not listening:
                 break
-            TEMP_AUDIO_FILE = os.path.join(tempfile.gettempdir(), "temp_audio_" + str(iter) + ".wav")
+            TEMP_AUDIO_FILE = os.getcwd() + "/temp_audio_" + str(iter) + ".wav"
             files.append(TEMP_AUDIO_FILE)
             
             # Record audio
@@ -225,9 +382,12 @@ def main():
             iter += 1
         
         print("Consolidating")
+        
+        setRing(mySense, blue)
+        
         # We have a path full of audio files.
         # Collect them all make a single new file
-        output_file = os.path.join(tempfile.gettempdir(), "temp_audio.wav")
+        output_file = os.getcwd() + "/temp_audio.wav"
         consolidate_audio_files(files, output_file)
         
         
@@ -241,7 +401,9 @@ def main():
         response = query_openai(prompt)
 
         # Speak response
-        text_to_speech(response)
+        # text_to_speech(response)
+    
+    exit(0)
 
 if __name__ == "__main__":
     main()
